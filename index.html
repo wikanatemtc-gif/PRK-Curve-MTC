@@ -385,7 +385,7 @@ onAuthStateChanged(window._fb.auth,user=>{
     <button class="tab" onclick="showPage('report',this)">📈 รายงาน</button>
     <button class="tab" onclick="showPage('settings',this)">⚙️ ตั้งค่า</button>
   </div>
-  <div style="font-size:11px;font-weight:700;color:var(--accent2);background:rgba(59,130,246,.12);padding:3px 10px;border-radius:20px;border:1px solid rgba(59,130,246,.25)">MTC</div><div style="font-size:11px;font-weight:700;color:#60A5FA;background:rgba(0,0,0,.2);padding:3px 10px;border-radius:20px;border:1px solid #60A5FA40">MTC</div><div class="nav-right no-print"><span id="nav-user" style="font-size:11px;color:var(--text2)"></span><button class="btn btn-ghost btn-sm" onclick="doLogout()">ออกจากระบบ</button>
+  <div style="font-size:11px;font-weight:700;color:#60A5FA;background:rgba(0,0,0,.2);padding:3px 10px;border-radius:20px;border:1px solid #60A5FA40">MTC</div><div class="nav-right no-print"><span id="nav-user" style="font-size:11px;color:var(--text2)"></span><button class="btn btn-ghost btn-sm" onclick="doLogout()">ออกจากระบบ</button>
     <div class="nav-clock" id="nav-clock"></div>
     <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨️ Print</button>
   </div>
@@ -1555,32 +1555,68 @@ function renderStock(){
     return true;
   });
 
-  document.getElementById('stock-body').innerHTML=prods.length===0
-    ?`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">ไม่พบสินค้า</td></tr>`
-    :prods.map((p,i)=>{
-      const st=stocks[p]; const s=currentStock(p); const m=getMin(p);
-      const pct=m>0?Math.min(100,Math.round(s/m*100)):100;
-      const barColor=s<=0?'var(--red)':s<=m?'var(--orange)':'var(--green)';
-      return `<tr>
-        <td style="color:var(--text3);font-size:11px">${i+1}</td>
-        <td style="font-weight:600">${p}</td>
-        <td><span class="badge b-blue" style="font-size:10px">${st.group||''}</span></td>
-        <td>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-family:var(--mono);font-size:18px;font-weight:700">${s}</span>
-            <div style="flex:1;min-width:60px">
-              <div class="stock-bar"><div class="stock-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
-            </div>
+  // เรียงตามกลุ่ม → ชื่อสินค้า
+  prods.sort((a,b)=>{
+    const ga=stocks[a]?.group||'', gb=stocks[b]?.group||'';
+    if(ga!==gb) return ga.localeCompare(gb,'th');
+    return a.localeCompare(b,'th');
+  });
+
+  if(prods.length===0){
+    document.getElementById('stock-body').innerHTML=
+      '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">ไม่พบสินค้า</td></tr>';
+    return;
+  }
+
+  // สร้าง rows พร้อม group header
+  let rows = '', lastGroup = '', rowNum = 0;
+  prods.forEach(p=>{
+    const st=stocks[p]; const s=currentStock(p); const m=getMin(p);
+    const grp = st.group||'';
+    // Group header row
+    if(grp !== lastGroup){
+      const grpProds = prods.filter(x=>(stocks[x]?.group||'')===grp);
+      const grpTotal = grpProds.reduce((a,x)=>a+currentStock(x),0);
+      const grpOut   = grpProds.filter(x=>currentStock(x)<=0).length;
+      rows += `<tr style="background:var(--surface2);border-top:2px solid var(--border2)">
+        <td colspan="7" style="padding:8px 14px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:12px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.04em">
+              📂 ${grp}
+            </span>
+            <span style="font-size:11px;color:var(--text3)">
+              ${grpProds.length} SKU · รวม <span style="color:var(--text);font-family:var(--mono);font-weight:700">${grpTotal.toLocaleString()}</span> ชิ้น
+              ${grpOut>0?`<span style="color:var(--red2);margin-left:6px">· หมด ${grpOut}</span>`:''}
+            </span>
           </div>
         </td>
-        <td style="color:var(--text3);font-family:var(--mono)">${m}</td>
-        <td>${stockBadge(p)}</td>
-        <td class="no-print">
-          <button class="btn btn-ghost btn-xs" onclick="openEditStock('${p}')">✏️ แก้ไข</button>
-          <button class="btn btn-ghost btn-xs" onclick="deleteSKU('${p}')" style="color:var(--red2);border-color:rgba(239,68,68,.3);margin-left:4px">🗑️</button>
-        </td>
       </tr>`;
-    }).join('');
+      lastGroup = grp;
+    }
+    rowNum++;
+    const pct=m>0?Math.min(100,Math.round(s/m*100)):100;
+    const barColor=s<=0?'var(--red)':s<=m?'var(--orange)':'var(--green)';
+    rows += `<tr>
+      <td style="color:var(--text3);font-size:11px">${rowNum}</td>
+      <td style="font-weight:600">${p}</td>
+      <td><span class="badge b-blue" style="font-size:10px">${grp}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-family:var(--mono);font-size:18px;font-weight:700">${s}</span>
+          <div style="flex:1;min-width:60px">
+            <div class="stock-bar"><div class="stock-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+          </div>
+        </div>
+      </td>
+      <td style="color:var(--text3);font-family:var(--mono)">${m}</td>
+      <td>${stockBadge(p)}</td>
+      <td class="no-print">
+        <button class="btn btn-ghost btn-xs" onclick="openEditStock('${p}')">✏️ แก้ไข</button>
+        <button class="btn btn-ghost btn-xs" onclick="deleteSKU('${p}')" style="color:var(--red2);border-color:rgba(239,68,68,.3);margin-left:4px">🗑️</button>
+      </td>
+    </tr>`;
+  });
+  document.getElementById('stock-body').innerHTML = rows;
 }
 
 // ═══════════════════════════════════════════════════
